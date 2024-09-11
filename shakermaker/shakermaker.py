@@ -1841,69 +1841,65 @@ class ShakerMaker:
 
                 
                 comm.Barrier()
-                def get_not_covered_points(rank, nprocs):
-                    if rank > 0:    
-                        dh_of_pairs = np.empty(n_computed_pairs, dtype=np.double)
-                        zrec_of_pairs = np.empty(n_computed_pairs, dtype=np.double)
-                        zsrc_of_pairs = np.empty(n_computed_pairs, dtype=np.double)              
-                    
-                    comm.Barrier()
-                    # send dh_of_pairs, dv_of_pairs, zrec_of_pairs, zsrc_of_pairs to all ranks
-                    if rank == 0:
-                        for i in range(1, nprocs):
-                            comm.Send(dh_of_pairs[:n_computed_pairs],   dest=i, tag=5)
-                            comm.Send(zrec_of_pairs[:n_computed_pairs], dest=i, tag=6)
-                            comm.Send(zsrc_of_pairs[:n_computed_pairs], dest=i, tag=7)
-                    else:
-                        comm.Recv(dh_of_pairs,   source=0, tag=5)
-                        comm.Recv(zrec_of_pairs, source=0, tag=6)
-                        comm.Recv(zsrc_of_pairs, source=0, tag=7)
-                    comm.Barrier()
-                    # now found uncovered points for each rank
-                    notcoverd = []
-                    if rank == 0:
-                        # measure the percentage of the cheking
-                        print(f"\t\tchecking the uncovered points")
-                        for i in tqdm(range(iend)):
-                            if np.all(lor(np.abs(dh[i]  - dh_of_pairs[:n_computed_pairs]) > delta_h, \
-                                        np.abs(z_src[i] - zsrc_of_pairs[:n_computed_pairs]) > delta_v_src, \
-                                        np.abs(z_rec[i] - zrec_of_pairs[:n_computed_pairs]) > delta_v_rec)):
-                                notcoverd.append(i)
-                                
-                    else:
-                        for i in range(len(mini_dh)):
-                            if np.all(lor(np.abs(mini_dh[i]  - dh_of_pairs) > delta_h, \
-                                        np.abs(mini_z_src[i] - zsrc_of_pairs) > delta_v_src, \
-                                        np.abs(mini_z_rec[i] - zrec_of_pairs) > delta_v_rec)):
-                                notcoverd.append(i)
-                    
-                    # if rank == 0:
-                    # print(f"{rank=} {notcoverd=}")
-                    notcoverd = np.array(notcoverd) + istart
+
+                if rank > 0:    
+                    dh_of_pairs = np.empty(n_computed_pairs, dtype=np.double)
+                    zrec_of_pairs = np.empty(n_computed_pairs, dtype=np.double)
+                    zsrc_of_pairs = np.empty(n_computed_pairs, dtype=np.double)              
                 
-                    comm.Barrier()
-                    # print(f"{rank=} {len(notcoverd)=}")
-                    # Gather the sizes of the notcoverd arrays from all processes
-                    notcoverd_sizes = comm.gather(len(notcoverd), root=0)
-
-                    if rank == 0:
-                        # Calculate the total size and create a buffer to hold all data
-                        total_size = sum(notcoverd_sizes)
-                        all_notcoverd = np.empty(total_size, dtype=int)
-                    else:
-                        all_notcoverd = None
-
-                    # Gather all notcoverd arrays to the root process
-                    comm.Gatherv(sendbuf=notcoverd, recvbuf=(all_notcoverd, notcoverd_sizes), root=0)
-                    notcoverd = all_notcoverd
-                    if rank == 0:
-                        print(f"\t\tnumber of pairs founded: {n_computed_pairs}")
-                        print(f"\t\tnumber of pairs skipped: {npairs_max - n_computed_pairs}")
-                        print(f"\t\tnumber of pairs notcovered yet: {len(all_notcoverd)}")
-                    return notcoverd
+                comm.Barrier()
+                # send dh_of_pairs, dv_of_pairs, zrec_of_pairs, zsrc_of_pairs to all ranks
+                if rank == 0:
+                    for i in range(1, nprocs):
+                        comm.Send(dh_of_pairs[:n_computed_pairs],   dest=i, tag=5)
+                        comm.Send(zrec_of_pairs[:n_computed_pairs], dest=i, tag=6)
+                        comm.Send(zsrc_of_pairs[:n_computed_pairs], dest=i, tag=7)
+                else:
+                    comm.Recv(dh_of_pairs,   source=0, tag=5)
+                    comm.Recv(zrec_of_pairs, source=0, tag=6)
+                    comm.Recv(zsrc_of_pairs, source=0, tag=7)
+                comm.Barrier()
+                # now found uncovered points for each rank
+                notcoverd = []
+                if rank == 0:
+                    # measure the percentage of the cheking
+                    print(f"\t\tchecking the uncovered points")
+                    for i in tqdm(range(iend)):
+                        if np.all(lor(np.abs(dh[i]  - dh_of_pairs[:n_computed_pairs]) > delta_h, \
+                                    np.abs(z_src[i] - zsrc_of_pairs[:n_computed_pairs]) > delta_v_src, \
+                                    np.abs(z_rec[i] - zrec_of_pairs[:n_computed_pairs]) > delta_v_rec)):
+                            notcoverd.append(i)
+                            
+                else:
+                    for i in range(len(mini_dh)):
+                        if np.all(lor(np.abs(mini_dh[i]  - dh_of_pairs) > delta_h, \
+                                    np.abs(mini_z_src[i] - zsrc_of_pairs) > delta_v_src, \
+                                    np.abs(mini_z_rec[i] - zrec_of_pairs) > delta_v_rec)):
+                            notcoverd.append(i)
                 
+                # if rank == 0:
+                # print(f"{rank=} {notcoverd=}")
+                notcoverd = np.array(notcoverd) + istart
+            
+                comm.Barrier()
+                # print(f"{rank=} {len(notcoverd)=}")
+                # Gather the sizes of the notcoverd arrays from all processes
+                notcoverd_sizes = comm.gather(len(notcoverd), root=0)
 
-                notcoverd = get_not_covered_points(rank, nprocs)
+                if rank == 0:
+                    # Calculate the total size and create a buffer to hold all data
+                    total_size = sum(notcoverd_sizes)
+                    all_notcoverd = np.empty(total_size, dtype=int)
+                else:
+                    all_notcoverd = None
+
+                # Gather all notcoverd arrays to the root process
+                comm.Gatherv(sendbuf=notcoverd, recvbuf=(all_notcoverd, notcoverd_sizes), root=0)
+                notcoverd = all_notcoverd
+                if rank == 0:
+                    print(f"\t\tnumber of pairs founded: {n_computed_pairs}")
+                    print(f"\t\tnumber of pairs skipped: {npairs_max - n_computed_pairs}")
+                    print(f"\t\tnumber of pairs notcovered yet: {len(all_notcoverd)}")
 
             
                 
@@ -1959,27 +1955,21 @@ class ShakerMaker:
                         #     print(f"\t\t\tOn {j=} of {len(indices)} {n_computed_pairs} ({n_computed_pairs/npairs*100}% reduction)")   
                     
                     notcoverd = []
-                    
-                    # print(f"\t\tchecking the uncovered points")
-                    # for j in tqdm(range(len(indexes))):
-                    #     i = indexes[j]
-                    #     if np.all(lor(np.abs(dh[i] - dh_of_pairs[:n_computed_pairs]) > delta_h, \
-                    #                 np.abs(z_src[i] - zsrc_of_pairs[:n_computed_pairs]) > delta_v_src, \
-                    #                 np.abs(z_rec[i] - zrec_of_pairs[:n_computed_pairs]) > delta_v_rec)):
-                    #         notcoverd.append(i)
-                    # print(f"\t\tnumber of pairs founded: {n_computed_pairs}")
-                    # print(f"\t\tnumber of points not covered yet: {len(notcoverd)}")
-                    notcoverd = get_not_covered_points(rank, nprocs)
+                    print(f"\t\tchecking the uncovered points")
+                    for j in tqdm(range(len(indexes))):
+                        i = indexes[j]
+                        if np.all(lor(np.abs(dh[i] - dh_of_pairs[:n_computed_pairs]) > delta_h, \
+                                    np.abs(z_src[i] - zsrc_of_pairs[:n_computed_pairs]) > delta_v_src, \
+                                    np.abs(z_rec[i] - zrec_of_pairs[:n_computed_pairs]) > delta_v_rec)):
+                            notcoverd.append(i)
+                    print(f"\t\tnumber of pairs founded: {n_computed_pairs}")
+                    print(f"\t\tnumber of points not covered yet: {len(notcoverd)}")
                     iteration += 1
                             
                         
-                # final check for the not covered points
-                if nprocs > 1:
-                    notcoverd = get_not_covered_points(rank, nprocs)
-                    if rank == 0:
-                        print("final check")
-                        print(f"\t\tnumber of pairs founded: {n_computed_pairs}")
-                        print(f"\t\tnumber of points not covered yet: {len(notcoverd)}")
+                # final checking 
+                # for j in tqdm(range(len(dh))):
+
 
 
                 print("Optimization done")
