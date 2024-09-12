@@ -913,6 +913,7 @@ class ShakerMaker:
                             ipair_target = best_match_index
                         else:
                             print(f"No suitable match found! {allow_out_of_bounds=} {min_distance=}")
+                            print(f"{rank=} {i_station=} {i_psource=}")
 
                         if ipair_target == len(dh_of_pairs):
                             print("Target not found in database -- SKIPPING")
@@ -1564,7 +1565,7 @@ class ShakerMaker:
         npairs_max=100000,
         using_vectorize_manner=False,
         cfactor = 0.5,
-        longer_version=True
+        finalcheck=True,
         ):
         """Run the simulation. 
         
@@ -1684,7 +1685,6 @@ class ShakerMaker:
             dh = np.linalg.norm(receiver_matrix[:, np.newaxis, :] - source_matrix[np.newaxis, :, :], axis=2)
             dh = dh.flatten()
 
-
             # compute the vertical distance matrix
             print ("Computing the vertical distance matrix")
             z_rec, z_src = np.meshgrid(z_rec, z_src, indexing='ij')
@@ -1711,28 +1711,31 @@ class ShakerMaker:
             else:
                 comm.Recv(mini_dh, source=0, tag=1)
                 comm.Recv(mini_z_rec, source=0, tag=2)
-                comm.Recv(mini_z_src, source=0, tag=3) 
-        elif nprocs == 1:
-            print("running on one processor")
-            istart = 0
-            iend = toatalnumberofpairs
+                comm.Recv(mini_z_src, source=0, tag=3)    
 
         comm.Barrier()            
 
  
-        if using_vectorize_manner==True and longer_version==False:
+        if using_vectorize_manner==True:
             if rank == 0:
                 # Creating bins
                 print ("Computing the bins")
                 eps = 1e-8
                 dh_max , dh_min = np.max(dh), np.min(dh)
-                dh_bins = np.arange(dh_min, dh_max + eps, delta_h*factor)
+                binsnumber = int((dh_max - dh_min) // (delta_h*factor) + 1)
+                dh_bins = np.linspace(dh_min, dh_max + eps, binsnumber+1)
+                assert np.all(np.diff(dh_bins) <= delta_h*factor)
+                
 
                 dzrec_max , dzrec_min = np.max(z_rec), np.min(z_rec)
-                dzrec_bins = np.arange(dzrec_min, dzrec_max + eps, delta_v_rec*factor)
+                binsnumber = int((dzrec_max - dzrec_min) // (delta_v_rec*factor) + 1)
+                dzrec_bins = np.linspace(dzrec_min, dzrec_max + eps, binsnumber+1)
+                assert np.all(np.diff(dzrec_bins) <= delta_v_rec*factor)
 
                 dzsrc_max , dzsrc_min = np.max(z_src), np.min(z_src)
-                dzsrc_bins = np.arange(dzsrc_min, dzsrc_max + eps, delta_v_src*factor)
+                binsnumber = int((dzsrc_max - dzsrc_min) // (delta_v_src*factor) + 1)
+                dzsrc_bins = np.linspace(dzsrc_min, dzsrc_max + eps, binsnumber+1)
+                assert np.all(np.diff(dzsrc_bins) <= delta_v_src*factor)
 
                 # computing total number of bins
                 num_bins = len(dh_bins) * len(dzrec_bins) * len(dzsrc_bins)
@@ -1803,17 +1806,17 @@ class ShakerMaker:
 
                         n_computed_pairs += 1
 
-                    
+                print(f"\t\tnumber of pairs founded: {n_computed_pairs}")
                     # if j % 10000 == 0 or j == len(indices) - 1:
                     #     print(f"\t\t\tOn {j=} of {npairs_max} {n_computed_pairs} ({n_computed_pairs/npairs*100}% reduction)")
 
             # wait for all ranks to reach here
             comm.Barrier()
-
             if nprocs ==1 :
+                print("using single processor:")
                 # now check that the founded pairs cover all the points 
                 notcoverd = []
-                for i in range(len(dh)):
+                for i in tqdm(range(len(dh))):
                     if np.all(lor(np.abs(dh[i] - dh_of_pairs[:n_computed_pairs]) > delta_h, \
                                 np.abs(z_src[i] - zsrc_of_pairs[:n_computed_pairs]) > delta_v_src, \
                                 np.abs(z_rec[i] - zrec_of_pairs[:n_computed_pairs]) > delta_v_rec)):
@@ -1823,7 +1826,11 @@ class ShakerMaker:
                 print(f"\t\tnumber of pairs founded: {n_computed_pairs}")
                 print(f"\t\tnumber of pairs skipped: {npairs_max - n_computed_pairs}")                
                 print(f"\t\tnumber of pairs notcovered yet: {len(notcoverd)}")
+                # print notcoverd in a file
+                np.savetxt("notcoverd_single.txt", notcoverd, fmt='%d')
             else:
+
+
                 if rank == 0:
                     # On rank 0, calculate or set the value of n_computed_pairs
                     n_computed_pairs = np.array(n_computed_pairs, dtype='i')  # Example value
@@ -1900,6 +1907,8 @@ class ShakerMaker:
                     print(f"\t\tnumber of pairs founded: {n_computed_pairs}")
                     print(f"\t\tnumber of pairs skipped: {npairs_max - n_computed_pairs}")
                     print(f"\t\tnumber of pairs notcovered yet: {len(all_notcoverd)}")
+                    # print notcoverd in a file
+                    np.savetxt("notcoverd_multi.txt", notcoverd, fmt='%d')
 
             
                 
@@ -1920,6 +1929,24 @@ class ShakerMaker:
 
                     # digitizing the data
 
+                    eps = 1e-8
+                    factor = 0.99
+                    dh_max , dh_min = np.max(dh), np.min(dh)
+                    binsnumber = int((dh_max - dh_min) // (delta_h*factor) + 1)
+                    dh_bins = np.linspace(dh_min-eps, dh_max + eps, binsnumber+1)
+                    assert np.all(np.diff(dh_bins) <= delta_h*factor)
+                    
+
+                    dzrec_max , dzrec_min = np.max(z_rec), np.min(z_rec)
+                    binsnumber = int((dzrec_max - dzrec_min) // (delta_v_rec*factor) + 1)
+                    dzrec_bins = np.linspace(dzrec_min-eps, dzrec_max + eps, binsnumber+1)
+                    assert np.all(np.diff(dzrec_bins) <= delta_v_rec*factor)
+
+                    dzsrc_max , dzsrc_min = np.max(z_src), np.min(z_src)
+                    binsnumber = int((dzsrc_max - dzsrc_min) // (delta_v_src*factor) + 1)
+                    dzsrc_bins = np.linspace(dzsrc_min-eps, dzsrc_max + eps, binsnumber+1)
+                    assert np.all(np.diff(dzsrc_bins) <= delta_v_src*factor)
+
                     dh_digitized    = np.digitize(dh[notcoverd], dh_bins)
                     z_rec_digitized = np.digitize(z_rec[notcoverd], dzrec_bins)
                     z_src_digitized = np.digitize(z_src[notcoverd], dzsrc_bins)
@@ -1933,15 +1960,17 @@ class ShakerMaker:
                     indices = np.sort(indices)
                     indices = indexes[indices]
 
+
                     
 
-                    print(f"\t\treducing the number of pairs:")
+                    # print(f"\t\treducing the number of pairs:")
                     for j in tqdm(range(len(indices))):
                         i = indices[j]
-                        condition = lor(np.abs(dh[i]    - dh_of_pairs[:n_computed_pairs]) > delta_h, \
-                                        np.abs(z_src[i] - zsrc_of_pairs[:n_computed_pairs]) > delta_v_src, \
-                                        np.abs(z_rec[i] - zrec_of_pairs[:n_computed_pairs]) > delta_v_rec)
-                        if np.all(condition):
+                        # condition = lor(np.abs(dh[i]    - dh_of_pairs[:n_computed_pairs]) > delta_h, \
+                        #                 np.abs(z_src[i] - zsrc_of_pairs[:n_computed_pairs]) > delta_v_src, \
+                        #                 np.abs(z_rec[i] - zrec_of_pairs[:n_computed_pairs]) > delta_v_rec)
+                        # if np.all(condition):
+                        if True:
                             istation = i // len(self._source._pslist)
                             ipsource = i % len(self._source._pslist)
                             pairs_to_compute[n_computed_pairs,:] = [istation, ipsource]
@@ -1955,23 +1984,33 @@ class ShakerMaker:
                         #     print(f"\t\t\tOn {j=} of {len(indices)} {n_computed_pairs} ({n_computed_pairs/npairs*100}% reduction)")   
                     
                     notcoverd = []
-                    print(f"\t\tchecking the uncovered points")
-                    for j in tqdm(range(len(indexes))):
-                        i = indexes[j]
-                        if np.all(lor(np.abs(dh[i] - dh_of_pairs[:n_computed_pairs]) > delta_h, \
-                                    np.abs(z_src[i] - zsrc_of_pairs[:n_computed_pairs]) > delta_v_src, \
-                                    np.abs(z_rec[i] - zrec_of_pairs[:n_computed_pairs]) > delta_v_rec)):
-                            notcoverd.append(i)
-                    print(f"\t\tnumber of pairs founded: {n_computed_pairs}")
-                    print(f"\t\tnumber of points not covered yet: {len(notcoverd)}")
+                    # print(f"\t\tchecking the uncovered points")
+                    # for j in tqdm(range(len(indexes))):
+                    #     i = indexes[j]
+                    #     if np.all(lor(np.abs(dh[i] - dh_of_pairs[:n_computed_pairs]) > delta_h, \
+                    #                 np.abs(z_src[i] - zsrc_of_pairs[:n_computed_pairs]) > delta_v_src, \
+                    #                 np.abs(z_rec[i] - zrec_of_pairs[:n_computed_pairs]) > delta_v_rec)):
+                    #         notcoverd.append(i)
+                    # print(f"\t\tnumber of pairs founded: {n_computed_pairs}")
+                    # print(f"\t\tnumber of points not covered yet: {len(notcoverd)}")
                     iteration += 1
                             
+                # if finalcheck:
+                #     if rank == 0:
+                #         print("final check")
+                #         # checking the not covered points
+                #         notcoverd = []
+                #         for i in range(len(dh)):
+                #             if np.all(lor(np.abs(dh[i] - dh_of_pairs[:n_computed_pairs]) > delta_h, \
+                #                         np.abs(z_src[i] - zsrc_of_pairs[:n_computed_pairs]) > delta_v_src, \
+                #                         np.abs(z_rec[i] - zrec_of_pairs[:n_computed_pairs]) > delta_v_rec)):
+                #                 notcoverd.append(i)
+                #             if i % (len(dh)//10) == 0:
+                #                 print(f"{((i+1)//len(dh)*100)}%")
+                #         print(f"\t\tnumber of pairs founded: {n_computed_pairs}")
+                #         print(f"\t\tnumber of points not covered yet: {len(notcoverd)}")
+                # print timin
                         
-                # final checking 
-                # for j in tqdm(range(len(dh))):
-
-
-
                 print("Optimization done")
                 print(f"Number of pairs founded: {n_computed_pairs}")
                 print(f"Number of pairs skipped: {npairs_max - n_computed_pairs}")
@@ -1998,111 +2037,6 @@ class ShakerMaker:
             #     print(f"\t\tnumber of points not covered yet: {len(notcoverd)}")
         
         comm.Barrier()
-
-        if (using_vectorize_manner==True) and (longer_version==True):
-            print("Using vectorize manner and longer version")
-            if rank == 0:
-                # make the factor 0.99 to avoid the error in the digitize function
-                factor = 0.98
-                # Creating bins
-                print ("Computing the bins")
-                eps = 1e-8
-                dh_max , dh_min = np.max(dh), np.min(dh)
-                # dh_bins = np.arange(dh_min, dh_max + eps, delta_h*factor)
-                num = (dh_max - dh_min) / (delta_h*factor)
-                # celing the number of bins
-                num = np.ceil(num)
-                num = int(num)
-                # bins should include the maximum value
-                dh_bins = np.linspace(dh_min-eps, dh_max+eps, num+1)
-
-
-                dzrec_max , dzrec_min = np.max(z_rec), np.min(z_rec)
-                num = (dzrec_max - dzrec_min) / (delta_v_rec*factor)
-                # celing the number of bins
-                num = np.ceil(num)
-                num = int(num)
-                # bins should include the maximum value
-                dzrec_bins = np.linspace(dzrec_min-eps, dzrec_max+eps, num+1)
-
-
-                dzsrc_max , dzsrc_min = np.max(z_src), np.min(z_src)
-                num = (dzsrc_max - dzsrc_min) / (delta_v_src*factor)
-                # celing the number of bins
-                num = np.ceil(num)
-                num = int(num)
-                # bins should include the maximum value
-                dzsrc_bins = np.linspace(dzsrc_min-eps, dzsrc_max+eps, num+1)
-
-
-                # verify that the bins differ by delta_h, delta_v_rec and delta_v_src
-                assert np.all(np.diff(dh_bins) - delta_h < 1e-8)
-                assert np.all(np.diff(dzrec_bins) - delta_v_rec < 1e-8)
-                assert np.all(np.diff(dzsrc_bins) - delta_v_src < 1e-8)
-
-
-                # computing total number of bins
-                num_bins = len(dh_bins) * len(dzrec_bins) * len(dzsrc_bins)
-                print(f"Total number of bins: {num_bins}")
-
-                # digitizing the data
-                print ("Digitizing the data")
-                dh_digitized = np.digitize(dh, dh_bins)
-                z_rec_digitized = np.digitize(z_rec, dzrec_bins)
-                z_src_digitized = np.digitize(z_src, dzsrc_bins)
-
-                
-                
-                
-                # creat matrix of pairs
-                print ("Creating the pairs")
-                dh_digitized    -= 1
-                z_rec_digitized -= 1
-                z_src_digitized -= 1
-                # pairs_to_compute =[categories[dh_digitized[i], z_rec_digitized[i], z_src_digitized[i]] for i in range(npairs)]
-                pairs_to_compute = dh_digitized * len(dzrec_bins) * len(dzsrc_bins) + z_rec_digitized * len(dzsrc_bins) + z_src_digitized
-                pairs_to_compute, indices,reverseIndicies = np.unique(pairs_to_compute, return_index=True,return_inverse=True)
-                indices = np.sort(indices)
-                i_station = indices // len(self._source._pslist)
-                i_psource = indices % len(self._source._pslist)
-
-
-
-
-
-
-
-                npairs_max = len(pairs_to_compute)
-                pairs_to_compute = np.empty((npairs_max, 2), dtype=np.int32)
-                dd_of_pairs   = np.empty(npairs_max, dtype=np.double)
-                dh_of_pairs   = np.empty(npairs_max, dtype=np.double)
-                dv_of_pairs   = np.empty(npairs_max, dtype=np.double)
-                zrec_of_pairs = np.empty(npairs_max, dtype=np.double)
-                zsrc_of_pairs = np.empty(npairs_max, dtype=np.double)
-
-                print(f"npairs_max = {npairs_max}")
-                # ====================================================================================================
-                # optimizing the number of pairs
-                # ====================================================================================================
-
-
-
-                n_computed_pairs = 0
-                print ("Optimizing the number of pairs")
-                print("\titeration 1")
-                print("\t\treducing the number of pairs:")
-            
-                # reducing the number of pairs
-                
-                for j in tqdm(range(len(indices))):
-                    i = indices[j]
-                    pairs_to_compute[n_computed_pairs,:] = [i_station[j], i_psource[j]]
-                    dd_of_pairs[n_computed_pairs] = dd[i]
-                    dh_of_pairs[n_computed_pairs] = dh[i]
-                    dv_of_pairs[n_computed_pairs] = dv[i]
-                    zrec_of_pairs[n_computed_pairs] = z_rec[i]
-                    zsrc_of_pairs[n_computed_pairs] = z_src[i]
-                    n_computed_pairs += 1
 
         if using_vectorize_manner==False:
             srart = perf_counter()
@@ -2218,6 +2152,67 @@ class ShakerMaker:
 
         # return dists, pairs_to_compute, dh_of_pairs, dv_of_pairs, zrec_of_pairs, zrec_of_pairs
         return 
+
+
+
+    def check_greens_function_database_pairs(self,  h5_database_name, delta_h=0.04, delta_v_rec=0.002, delta_v_src=0.2):
+        import h5py
+        if rank == 0:
+            hfile = h5py.File(h5_database_name + '.h5', 'r+')
+
+            pairs_to_compute = hfile["/pairs_to_compute"][:]
+            dh_of_pairs      = hfile["/dh_of_pairs"][:]
+            zrec_of_pairs    = hfile["/zrec_of_pairs"][:]
+            zsrc_of_pairs    = hfile["/zsrc_of_pairs"][:]
+            f = open("check.txt", "w")
+            bar = tqdm(total=self._receivers.nstations)
+            bar2 = tqdm(total=self._source.nsources)
+            for i_station, station in enumerate(self._receivers):
+                bar.update(1)
+                bar2.reset()
+                for i_psource, psource in enumerate(self._source):
+                    bar2.update(1)
+
+                    x_src = psource.x
+                    x_rec = station.x
+                
+                    z_src = psource.x[2]
+                    z_rec = station.x[2]
+
+                    d = x_rec - x_src
+                    dh = np.sqrt(np.dot(d[0:2],d[0:2]))
+
+                    min_distance = float('inf')
+                    best_match_index = -1
+
+                    for i in range(len(dh_of_pairs)):
+                        dh_p, zrec_p, zsrc_p = dh_of_pairs[i], zrec_of_pairs[i], zsrc_of_pairs[i]
+                        
+                        # Check if the current pair is within the tolerances
+                        if (abs(dh - dh_p) < delta_h and abs(z_src - zsrc_p) < delta_v_src and abs(z_rec - zrec_p) < delta_v_rec):
+                            best_match_index = i
+                            
+                    if best_match_index == -1:
+                        # print(f"No suitable match found! {min_distance=}")
+                        # print(f"{rank=} {i_station=} {i_psource=}")
+                        # write on the file
+                        f.write(f"{rank=} {i_station=} {i_psource=}\n")
+                    if i_psource % 1000 == 0:
+                        # flush the file
+                        f.flush()
+            f.close()
+            bar.close()
+            bar2.close()
+
+                    
+
+            
+
+            
+
+
+
+
 
     def write(self, writer):
         writer.write(self._receivers)
