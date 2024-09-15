@@ -1646,8 +1646,8 @@ class ShakerMaker:
             for i in range(nprocs):
                 istartList.append(i * toatalnumberofpairs // nprocs)
                 iendList.append((i + 1) * toatalnumberofpairs // nprocs)
-            print(f"{istartList=}")
-            print(f"{iendList=}")
+            # print(f"{istartList=}")
+            # print(f"{iendList=}")
         
 
         
@@ -1826,8 +1826,8 @@ class ShakerMaker:
                 print(f"\t\tnumber of pairs founded: {n_computed_pairs}")
                 print(f"\t\tnumber of pairs skipped: {npairs_max - n_computed_pairs}")                
                 print(f"\t\tnumber of pairs notcovered yet: {len(notcoverd)}")
-                # print notcoverd in a file
-                np.savetxt("notcoverd_single.txt", notcoverd, fmt='%d')
+                # # print notcoverd in a file
+                # np.savetxt("notcoverd_single.txt", notcoverd, fmt='%d')
             else:
 
 
@@ -1907,8 +1907,8 @@ class ShakerMaker:
                     print(f"\t\tnumber of pairs founded: {n_computed_pairs}")
                     print(f"\t\tnumber of pairs skipped: {npairs_max - n_computed_pairs}")
                     print(f"\t\tnumber of pairs notcovered yet: {len(all_notcoverd)}")
-                    # print notcoverd in a file
-                    np.savetxt("notcoverd_multi.txt", notcoverd, fmt='%d')
+                    # # print notcoverd in a file
+                    # np.savetxt("notcoverd_multi.txt", notcoverd, fmt='%d')
 
             
                 
