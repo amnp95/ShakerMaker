@@ -1674,6 +1674,7 @@ class ShakerMaker:
 
             # creating DRM stations in csv file
             if StationType.lower() == "drm":
+                import os
                 if not os.path.dirname(store_here):  # If the path is just a filename
                     mother_directory = os.getcwd()  # Get the current working directory
                 else:
