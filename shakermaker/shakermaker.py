@@ -1566,6 +1566,7 @@ class ShakerMaker:
         using_vectorize_manner=False,
         cfactor = 0.5,
         finalcheck=True,
+        StationType="DRM",
         ):
         """Run the simulation. 
         
@@ -1670,6 +1671,19 @@ class ShakerMaker:
             for i_station, station in enumerate(self._receivers):
                 receiver_matrix[i_station, :] = station.x
 
+
+            # creating DRM stations in csv file
+            if StationType.lower() == "drm":
+                if not os.path.dirname(store_here):  # If the path is just a filename
+                    mother_directory = os.getcwd()  # Get the current working directory
+                else:
+                    mother_directory = os.path.dirname(os.path.abspath(store_here))
+
+                np.savetxt(mother_directory + "/DRMPoints.csv", source_matrix, delimiter=",", header="x,y,z", comments="")
+                
+                
+
+            
             z_rec           = receiver_matrix[:,2]
             z_src           = source_matrix[:,2]
 
