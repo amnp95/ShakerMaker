@@ -1680,7 +1680,7 @@ class ShakerMaker:
                 else:
                     mother_directory = os.path.dirname(os.path.abspath(store_here))
 
-                np.savetxt(mother_directory + "/DRMPoints.csv", source_matrix, delimiter=",", header="x,y,z", comments="")
+                np.savetxt(mother_directory + "/DRMPoints.csv", receiver_matrix, delimiter=",", header="x,y,z", comments="")
                 
                 
 
