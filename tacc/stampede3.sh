@@ -42,5 +42,6 @@ python3 stampede3.py install
 
 # pip list : you should see the ShakerMaker package in the list of installed packages
 pip list
+cd ..
 
 
